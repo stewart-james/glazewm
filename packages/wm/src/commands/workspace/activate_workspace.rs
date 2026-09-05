@@ -1,12 +1,15 @@
 use anyhow::Context;
 use tracing::info;
-use wm_common::{TilingDirection, WmEvent, WorkspaceConfig};
+use wm_common::{AreaConfig, TilingDirection, WmEvent, WorkspaceConfig};
 
 use super::sort_workspaces;
 use crate::{
   commands::container::attach_container,
-  models::{Monitor, Workspace},
-  traits::{CommonGetters, PositionGetters},
+  models::{Monitor, SplitContainer, Workspace},
+  traits::{
+    CommonGetters, PositionGetters, TilingDirectionGetters,
+    TilingSizeGetters,
+  },
   user_config::UserConfig,
   wm_state::WmState,
 };
@@ -70,6 +73,8 @@ pub fn activate_workspace(
     None,
   )?;
 
+  create_workspace_areas(&workspace, &workspace_config.areas, config)?;
+
   sort_workspaces(&target_monitor, config)?;
 
   info!("Activating workspace: {workspace}");
@@ -112,4 +117,83 @@ fn workspace_config(
   };
 
   found_config.cloned()
+}
+
+/// Creates the workspace's fixed-width areas (if configured) as
+/// persistent top-level split containers, sized according to config.
+///
+/// Does nothing if the workspace's config has no `areas` defined.
+fn create_workspace_areas(
+  workspace: &Workspace,
+  areas_config: &[AreaConfig],
+  config: &UserConfig,
+) -> anyhow::Result<()> {
+  if areas_config.is_empty() {
+    return Ok(());
+  }
+
+  let workspace_rect = workspace.to_rect()?;
+  let total_length = match workspace.tiling_direction() {
+    TilingDirection::Horizontal => workspace_rect.width(),
+    TilingDirection::Vertical => workspace_rect.height(),
+  };
+
+  // Convert each area's configured width to a fraction of the
+  // workspace's length, then normalize so the fractions always add up
+  // to 1, regardless of what the config values add up to.
+  let raw_fractions = areas_config
+    .iter()
+    .map(|area| area.width.to_percentage(total_length).max(0.))
+    .collect::<Vec<_>>();
+
+  let fraction_sum: f32 = raw_fractions.iter().sum();
+
+  #[allow(clippy::cast_precision_loss)]
+  let normalized_fractions = if fraction_sum > 0. {
+    raw_fractions
+      .iter()
+      .map(|fraction| fraction / fraction_sum)
+      .collect::<Vec<_>>()
+  } else {
+    vec![1. / areas_config.len() as f32; areas_config.len()]
+  };
+
+  // If no area is explicitly marked as default, fall back to the first.
+  let has_explicit_default =
+    areas_config.iter().any(|area| area.default);
+
+  let areas = areas_config
+    .iter()
+    .enumerate()
+    .map(|(index, area_config)| {
+      let area = SplitContainer::new(
+        workspace.tiling_direction(),
+        config.value.gaps.clone(),
+      );
+
+      area.set_is_area(true);
+      area.set_is_default_area(if has_explicit_default {
+        area_config.default
+      } else {
+        index == 0
+      });
+
+      attach_container(
+        &area.clone().into(),
+        &workspace.clone().into(),
+        None,
+      )?;
+
+      Ok(area)
+    })
+    .collect::<anyhow::Result<Vec<_>>>()?;
+
+  // Set the final tiling sizes only after every area has been attached,
+  // since `attach_container` redistributes space equally amongst
+  // siblings as each new one is added.
+  for (area, fraction) in areas.iter().zip(normalized_fractions) {
+    area.set_tiling_size(fraction);
+  }
+
+  Ok(())
 }

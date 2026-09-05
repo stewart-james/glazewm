@@ -385,6 +385,34 @@ pub struct WorkspaceConfig {
 
   #[serde(default = "default_bool::<false>")]
   pub keep_alive: bool,
+
+  /// Fixed-width areas to split the workspace into (e.g. a permanent
+  /// left/center/right layout on an ultrawide monitor). Windows can be
+  /// freely tiled within an area, but never move out of it.
+  ///
+  /// If empty (the default), the workspace doesn't use areas and tiles
+  /// normally.
+  #[serde(default)]
+  pub areas: Vec<AreaConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all(serialize = "camelCase"))]
+pub struct AreaConfig {
+  /// Width of the area. Accepts a percentage of the workspace's width
+  /// (e.g. `'25%'`), or an absolute pixel amount (e.g. `'400px'`).
+  ///
+  /// Area widths are normalized relative to each other, so they don't
+  /// need to add up to 100%. If the workspace's windows tile vertically
+  /// (i.e. on a portrait monitor), this instead controls each area's
+  /// height.
+  pub width: LengthValue,
+
+  /// Whether new windows are placed in this area by default (e.g. the
+  /// first window opened on the workspace, or one with no better
+  /// placement). If unset on every area, the first area is used.
+  #[serde(default)]
+  pub default: bool,
 }
 
 /// Helper function for setting a default value for a boolean field.

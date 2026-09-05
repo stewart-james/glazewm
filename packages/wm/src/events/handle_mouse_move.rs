@@ -1,11 +1,13 @@
 use anyhow::Context;
 #[cfg(target_os = "macos")]
 use wm_common::try_warn;
-use wm_platform::{MouseButton, MouseEvent};
+use wm_platform::{MouseButton, MouseEvent, Point};
 
 use crate::{
-  commands::container::set_focused_descendant, traits::CommonGetters,
-  user_config::UserConfig, wm_state::WmState,
+  commands::container::set_focused_descendant,
+  traits::{CommonGetters, PositionGetters},
+  user_config::UserConfig,
+  wm_state::WmState,
 };
 #[cfg(target_os = "macos")]
 use crate::{
@@ -53,6 +55,20 @@ pub fn handle_mouse_move(
     }
 
     return Ok(());
+  }
+
+  // A click that doesn't land on any window is otherwise invisible to the
+  // WM (there's no native focus event for it), but it's still a useful
+  // signal: it's how a user marks an (often empty) area as where they
+  // want the next opened window to go. On macOS this is unreachable,
+  // since the block above already returns on every left-click release.
+  if let MouseEvent::ButtonUp {
+    button: MouseButton::Left,
+    position,
+    ..
+  } = event
+  {
+    handle_area_click(position, state)?;
   }
 
   if let MouseEvent::Move {
@@ -124,6 +140,46 @@ pub fn handle_mouse_move(
         state.pending_sync.queue_focus_change();
       }
     }
+  }
+
+  Ok(())
+}
+
+/// Records the workspace's clicked-on area (if any) so that the next
+/// opened window is placed there. See `Workspace::last_active_area`.
+fn handle_area_click(
+  position: &Point,
+  state: &mut WmState,
+) -> anyhow::Result<()> {
+  // If the click landed on a window, that window's own focus already
+  // reflects the user's intent - nothing extra to track here.
+  if state.dispatcher.window_from_point(position)?.is_some() {
+    return Ok(());
+  }
+
+  let Some(workspace) = state
+    .monitor_at_point(position)
+    .and_then(|monitor| monitor.displayed_workspace())
+  else {
+    return Ok(());
+  };
+
+  let clicked_area = workspace.tiling_children().find_map(|child| {
+    let area = child.as_split()?.clone();
+
+    if !area.is_area() {
+      return None;
+    }
+
+    area
+      .to_rect()
+      .ok()
+      .filter(|rect| rect.contains_point(position))
+      .map(|_| area)
+  });
+
+  if let Some(area) = clicked_area {
+    workspace.set_last_active_area_id(Some(area.id()));
   }
 
   Ok(())

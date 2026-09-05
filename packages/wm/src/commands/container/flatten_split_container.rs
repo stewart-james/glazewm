@@ -15,6 +15,13 @@ use crate::{
 pub fn flatten_split_container(
   split_container: SplitContainer,
 ) -> anyhow::Result<()> {
+  // Area containers represent a fixed-width region of the workspace and
+  // must persist even when empty or down to a single child, so that the
+  // width they were configured with isn't lost.
+  if split_container.is_area() {
+    return Ok(());
+  }
+
   let parent = split_container.parent().context("No parent.")?;
 
   let updated_children =

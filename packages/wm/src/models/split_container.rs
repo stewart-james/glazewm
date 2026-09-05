@@ -35,6 +35,8 @@ struct SplitContainerInner {
   tiling_size: f32,
   tiling_direction: TilingDirection,
   gaps_config: GapsConfig,
+  is_area: bool,
+  is_default_area: bool,
 }
 
 impl SplitContainer {
@@ -50,9 +52,37 @@ impl SplitContainer {
       tiling_size: 1.0,
       tiling_direction,
       gaps_config,
+      is_area: false,
+      is_default_area: false,
     };
 
     Self(Rc::new(RefCell::new(split)))
+  }
+
+  /// Whether this is a fixed-width area container (e.g. a left/center/
+  /// right column on an ultrawide monitor), as opposed to a regular,
+  /// unnamed split container created ad hoc while tiling windows.
+  ///
+  /// Area containers are never removed by container-flattening logic,
+  /// and windows can't be moved out of them by direction-based move
+  /// commands.
+  pub fn is_area(&self) -> bool {
+    self.0.borrow().is_area
+  }
+
+  pub fn set_is_area(&self, is_area: bool) {
+    self.0.borrow_mut().is_area = is_area;
+  }
+
+  /// Whether new windows are placed in this area by default when there's
+  /// no better placement (e.g. the first window opened on the
+  /// workspace). Only meaningful when [`Self::is_area`] is `true`.
+  pub fn is_default_area(&self) -> bool {
+    self.0.borrow().is_default_area
+  }
+
+  pub fn set_is_default_area(&self, is_default_area: bool) {
+    self.0.borrow_mut().is_default_area = is_default_area;
   }
 
   pub fn to_dto(&self) -> anyhow::Result<ContainerDto> {
@@ -75,6 +105,8 @@ impl SplitContainer {
       height: rect.height(),
       x: rect.x(),
       y: rect.y(),
+      is_area: self.is_area(),
+      is_default_area: self.is_default_area(),
     }))
   }
 }

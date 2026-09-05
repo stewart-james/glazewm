@@ -68,11 +68,27 @@ fn move_tiling_window(
     .direction_container()
     .context("No direction container.")?;
 
+  // Whether the workspace uses fixed-width areas (e.g. left/center/right
+  // columns on an ultrawide monitor), which windows can be rearranged
+  // within, but never escape. This is only true for workspaces whose
+  // config actually defines `areas` - a workspace with multiple ordinary
+  // top-level windows (the common case) is unaffected.
+  let has_area_boundaries = window_to_move
+    .workspace()
+    .context("No workspace.")?
+    .tiling_children()
+    .any(|child| child.as_split().is_some_and(SplitContainer::is_area));
+
+  // Whether the window is at the boundary of its enclosing area (i.e. its
+  // nearest direction container is the workspace itself). Siblings of the
+  // workspace are other areas, so it cannot be swapped/moved past them.
+  let is_area_boundary = has_area_boundaries && parent.is_workspace();
+
   let has_matching_tiling_direction = parent.tiling_direction()
     == TilingDirection::from_direction(direction);
 
   // Attempt to swap or move the window into a sibling container.
-  if has_matching_tiling_direction {
+  if has_matching_tiling_direction && !is_area_boundary {
     if let Some(sibling) =
       tiling_sibling_in_direction(&window_to_move, direction)
     {
@@ -89,6 +105,7 @@ fn move_tiling_window(
   if (has_matching_tiling_direction
     || window_to_move.tiling_siblings().count() == 0)
     && parent.is_workspace()
+    && !has_area_boundaries
   {
     return move_to_workspace_in_direction(
       &window_to_move.into(),
@@ -99,14 +116,21 @@ fn move_tiling_window(
 
   // The window cannot be moved within the parent container, so traverse
   // upwards to find an ancestor that has the correct tiling direction.
+  // The workspace itself is excluded once area boundaries are in effect,
+  // since climbing into it would move the window into a different area.
   let target_ancestor = parent.ancestors().find_map(|ancestor| {
     ancestor.as_direction_container().ok().filter(|ancestor| {
       ancestor.tiling_direction()
         == TilingDirection::from_direction(direction)
+        && !(has_area_boundaries && ancestor.is_workspace())
     })
   });
 
   match target_ancestor {
+    // If area boundaries are in effect, the window is already at the
+    // edge of its area, so do nothing instead of escaping into a
+    // neighboring area via a workspace tiling direction inversion.
+    None if has_area_boundaries => Ok(()),
     // If there is no suitable ancestor, then change the tiling direction
     // of the workspace.
     None => invert_workspace_tiling_direction(

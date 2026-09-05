@@ -21,4 +21,6 @@ pub struct SplitContainerDto {
   pub x: i32,
   pub y: i32,
   pub tiling_direction: TilingDirection,
+  pub is_area: bool,
+  pub is_default_area: bool,
 }

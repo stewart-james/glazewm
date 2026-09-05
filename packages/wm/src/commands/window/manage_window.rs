@@ -10,7 +10,7 @@ use crate::{
   },
   models::{
     Container, Monitor, NativeWindowProperties, NonTilingWindow,
-    TilingWindow, WindowContainer,
+    SplitContainer, TilingWindow, WindowContainer, Workspace,
   },
   traits::{CommonGetters, PositionGetters, WindowGetters},
   user_config::UserConfig,
@@ -172,7 +172,7 @@ fn create_window(
   // Attach the new window as the first child of the target parent (if
   // provided), otherwise, add as a sibling of the focused container.
   let (target_parent, target_index) = match target_parent {
-    Some(parent) => (parent, 0),
+    Some(parent) => (explicit_target_parent(parent, &window_state), 0),
     None => insertion_target(&window_state, state)?,
   };
 
@@ -314,9 +314,15 @@ fn window_state_to_create(
 /// - For non-tiling windows: Always append to the workspace.
 /// - For tiling windows:
 ///   1. Try to insert after the focused tiling window if one exists.
-///   2. If a non-tiling window is focused, try to insert after the first
-///      tiling window found.
-///   3. If no tiling windows exist, append to the workspace.
+///   2. Otherwise, if the workspace uses fixed-width areas and one was
+///      last clicked/active (see `Workspace::last_active_area`), insert
+///      into it. This is what makes clicking empty space within an area
+///      "stick" as the target for the next opened window.
+///   3. Otherwise, try to insert after the first tiling window found
+///      anywhere on the workspace.
+///   4. If no tiling windows exist and the workspace has fixed-width
+///      areas configured, insert into the default area.
+///   5. Otherwise, append to the workspace.
 ///
 /// Returns tuple of (parent container, insertion index).
 fn insertion_target(
@@ -329,20 +335,39 @@ fn insertion_target(
   let focused_workspace =
     focused_container.workspace().context("No workspace.")?;
 
-  // For tiling windows, try to find a suitable tiling window to insert
-  // next to.
   if *window_state == WindowState::Tiling {
-    let sibling = match focused_container {
-      Container::TilingWindow(_) => Some(focused_container),
-      _ => focused_workspace
-        .descendant_focus_order()
-        .find(Container::is_tiling_window),
-    };
+    // Insert right after the focused window, if there is one. This takes
+    // priority over the last active area, since it's the more precise
+    // and more recent of the two signals.
+    if let Container::TilingWindow(_) = &focused_container {
+      return Ok((
+        focused_container.parent().context("No parent.")?,
+        focused_container.index() + 1,
+      ));
+    }
 
-    if let Some(sibling) = sibling {
+    if let Some(area) = focused_workspace.last_active_area() {
+      return Ok((area.clone().into(), area.child_count()));
+    }
+
+    if let Some(sibling) = focused_workspace
+      .descendant_focus_order()
+      .find(Container::is_tiling_window)
+    {
       return Ok((
         sibling.parent().context("No parent.")?,
         sibling.index() + 1,
+      ));
+    }
+
+    // No tiling windows exist yet on the workspace (e.g. it's the first
+    // window opened on it). If the workspace uses fixed-width areas,
+    // place the window in the default area instead of directly on the
+    // workspace, so it doesn't become a rogue extra area of its own.
+    if let Some(default_area) = default_area(&focused_workspace) {
+      return Ok((
+        default_area.clone().into(),
+        default_area.child_count(),
       ));
     }
   }
@@ -352,4 +377,45 @@ fn insertion_target(
     focused_workspace.clone().into(),
     focused_workspace.child_count(),
   ))
+}
+
+/// Resolves an explicitly-given target parent for a new window (as
+/// opposed to one derived via [`insertion_target`]).
+///
+/// If the target is a workspace that uses fixed-width areas and the
+/// window will be tiling, redirects into the workspace's default area
+/// instead of the workspace directly. Without this, windows that are
+/// already open when the WM starts (see `WmState::populate`, which
+/// passes the workspace itself as the target parent) would bypass areas
+/// entirely and become rogue extra top-level containers.
+fn explicit_target_parent(
+  parent: Container,
+  window_state: &WindowState,
+) -> Container {
+  if *window_state == WindowState::Tiling {
+    if let Container::Workspace(workspace) = &parent {
+      if let Some(default_area) = default_area(workspace) {
+        return default_area.into();
+      }
+    }
+  }
+
+  parent
+}
+
+/// Gets the workspace's default area to place new windows in, if the
+/// workspace uses fixed-width areas.
+fn default_area(workspace: &Workspace) -> Option<SplitContainer> {
+  let areas = workspace
+    .tiling_children()
+    .filter_map(|child| {
+      child.as_split().filter(|split| split.is_area()).cloned()
+    })
+    .collect::<Vec<_>>();
+
+  areas
+    .iter()
+    .find(|area| area.is_default_area())
+    .or(areas.first())
+    .cloned()
 }

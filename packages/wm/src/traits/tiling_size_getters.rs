@@ -58,9 +58,15 @@ pub trait TilingSizeGetters: CommonGetters {
 
     let container_to_resize = if is_inverse_resize {
       match parent {
-        // Prevent workspaces from being resized.
-        DirectionContainer::Split(parent) => Some(parent.into()),
-        DirectionContainer::Workspace(_) => None,
+        // Prevent workspaces from being resized. Area containers are also
+        // excluded - their width is a fixed, deliberately-configured
+        // boundary and shouldn't change as a side effect of resizing a
+        // window inside them (e.g. resizing a window's height would
+        // otherwise bubble up into resizing the area's width).
+        DirectionContainer::Split(parent) if !parent.is_area() => {
+          Some(parent.into())
+        }
+        _ => None,
       }
     } else {
       let grandparent = parent.parent().context("No grandparent.")?;
@@ -70,9 +76,12 @@ pub trait TilingSizeGetters: CommonGetters {
         Some(self.as_tiling_container()?)
       } else {
         // Resize grandparent in layouts like H[1 V[2 H[3]]], where
-        // container 3 is resized horizontally.
+        // container 3 is resized horizontally. Excludes area containers
+        // for the same reason as above.
         match grandparent {
-          Container::Split(grandparent) => Some(grandparent.into()),
+          Container::Split(grandparent) if !grandparent.is_area() => {
+            Some(grandparent.into())
+          }
           _ => None,
         }
       }

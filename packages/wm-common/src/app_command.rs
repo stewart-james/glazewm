@@ -160,6 +160,14 @@ pub enum InvokeCommand {
   Focus(InvokeFocusCommand),
   Ignore,
   Move(InvokeMoveCommand),
+  /// Moves the focused window into the adjacent area in the given
+  /// direction, bypassing the normal area boundary. Does nothing if
+  /// there's no adjacent area in that direction, or if the focused
+  /// window isn't within an area.
+  MoveToArea {
+    #[clap(long)]
+    direction: Direction,
+  },
   MoveWorkspace {
     #[clap(long)]
     direction: Direction,

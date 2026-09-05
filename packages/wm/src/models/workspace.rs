@@ -15,7 +15,8 @@ use crate::{
   impl_common_getters, impl_container_debug,
   impl_tiling_direction_getters,
   models::{
-    Container, DirectionContainer, TilingContainer, WindowContainer,
+    Container, DirectionContainer, SplitContainer, TilingContainer,
+    WindowContainer,
   },
   traits::{CommonGetters, PositionGetters, TilingDirectionGetters},
 };
@@ -32,6 +33,7 @@ struct WorkspaceInner {
   config: WorkspaceConfig,
   gaps_config: GapsConfig,
   tiling_direction: TilingDirection,
+  last_active_area_id: Option<Uuid>,
 }
 
 impl Workspace {
@@ -48,9 +50,28 @@ impl Workspace {
       config,
       gaps_config,
       tiling_direction,
+      last_active_area_id: None,
     };
 
     Self(Rc::new(RefCell::new(workspace)))
+  }
+
+  /// Sets the area that new windows should preferentially be placed
+  /// into, e.g. because empty space within it was just clicked.
+  pub fn set_last_active_area_id(&self, area_id: Option<Uuid>) {
+    self.0.borrow_mut().last_active_area_id = area_id;
+  }
+
+  /// Gets the workspace's last active area (see
+  /// [`Self::set_last_active_area_id`]), if it's still a valid area
+  /// among the workspace's current children.
+  pub fn last_active_area(&self) -> Option<SplitContainer> {
+    let area_id = self.0.borrow().last_active_area_id?;
+
+    self.tiling_children().find_map(|child| {
+      let area = child.as_split()?.clone();
+      (area.is_area() && area.id() == area_id).then_some(area)
+    })
   }
 
   /// Underlying config for the workspace.

@@ -26,9 +26,9 @@ use crate::{
     },
     monitor::focus_monitor,
     window::{
-      ignore_window, move_window_in_direction, move_window_to_workspace,
-      resize_window, set_window_position, set_window_size,
-      update_window_state, WindowPositionTarget,
+      ignore_window, move_window_in_direction, move_window_to_area,
+      move_window_to_workspace, resize_window, set_window_position,
+      set_window_size, update_window_state, WindowPositionTarget,
     },
     workspace::{
       focus_workspace, move_workspace_in_direction,
@@ -431,6 +431,12 @@ impl WindowManager {
             Ok(())
           }
 
+          _ => Ok(()),
+        }
+      }
+      InvokeCommand::MoveToArea { direction } => {
+        match subject_container.as_window_container() {
+          Ok(window) => move_window_to_area(window, direction, state),
           _ => Ok(()),
         }
       }
