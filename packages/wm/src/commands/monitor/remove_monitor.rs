@@ -30,7 +30,7 @@ pub fn remove_monitor(
   // Avoid moving empty workspaces.
   let workspaces_to_move =
     monitor.workspaces().into_iter().filter(|workspace| {
-      workspace.has_children() || workspace.config().keep_alive
+      !workspace.is_empty() || workspace.config().keep_alive
     });
 
   for workspace in workspaces_to_move {

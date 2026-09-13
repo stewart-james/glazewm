@@ -27,7 +27,7 @@ pub fn handle_window_destroyed(
     // Destroy parent workspace if window was killed while its workspace
     // was not displayed (e.g. via task manager).
     if !workspace.config().keep_alive
-      && !workspace.has_children()
+      && workspace.is_empty()
       && !workspace.is_displayed()
     {
       deactivate_workspace(workspace, state)?;

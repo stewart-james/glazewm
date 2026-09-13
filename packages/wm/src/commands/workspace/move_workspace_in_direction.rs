@@ -74,7 +74,7 @@ pub fn move_workspace_in_direction(
     let workspace_to_destroy =
       target_monitor.workspaces().into_iter().find(|workspace| {
         !workspace.config().keep_alive
-          && !workspace.has_children()
+          && workspace.is_empty()
           && !workspace.is_displayed()
       });
 

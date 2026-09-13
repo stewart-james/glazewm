@@ -4,7 +4,7 @@ use wm_platform::{
   RectDelta,
 };
 
-use crate::app_command::InvokeCommand;
+use crate::{app_command::InvokeCommand, TilingDirection};
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
 #[serde(default, rename_all(serialize = "camelCase"))]
@@ -413,6 +413,13 @@ pub struct AreaConfig {
   /// placement). If unset on every area, the first area is used.
   #[serde(default)]
   pub default: bool,
+
+  /// Direction that windows *within* this area tile in - e.g. `'vertical'`
+  /// to stack them top/bottom instead of side-by-side. Defaults to the
+  /// workspace's own tiling direction (typically `'horizontal'`, since
+  /// areas themselves are laid out side-by-side).
+  #[serde(default)]
+  pub tiling_direction: Option<TilingDirection>,
 }
 
 /// Helper function for setting a default value for a boolean field.

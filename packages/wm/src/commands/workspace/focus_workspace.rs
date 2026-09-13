@@ -76,7 +76,7 @@ pub fn focus_workspace(
     let workspace_to_destroy =
       state.workspaces().into_iter().find(|workspace| {
         !workspace.config().keep_alive
-          && !workspace.has_children()
+          && workspace.is_empty()
           && !workspace.is_displayed()
       });
 

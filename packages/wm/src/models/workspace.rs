@@ -67,11 +67,44 @@ impl Workspace {
   /// among the workspace's current children.
   pub fn last_active_area(&self) -> Option<SplitContainer> {
     let area_id = self.0.borrow().last_active_area_id?;
+    self.areas().into_iter().find(|area| area.id() == area_id)
+  }
 
-    self.tiling_children().find_map(|child| {
-      let area = child.as_split()?.clone();
-      (area.is_area() && area.id() == area_id).then_some(area)
-    })
+  /// Ordered list of the workspace's area containers (empty if the
+  /// workspace doesn't use fixed-width areas).
+  pub fn areas(&self) -> Vec<SplitContainer> {
+    self
+      .tiling_children()
+      .filter_map(|child| {
+        child.as_split().filter(|split| split.is_area()).cloned()
+      })
+      .collect()
+  }
+
+  /// Gets the area that new windows should be placed into when there's
+  /// no more specific placement (e.g. the area marked `default: true`
+  /// in config, or the first area if none is marked). `None` if the
+  /// workspace doesn't use fixed-width areas.
+  pub fn default_area(&self) -> Option<SplitContainer> {
+    let areas = self.areas();
+    areas
+      .iter()
+      .find(|area| area.is_default_area())
+      .or(areas.first())
+      .cloned()
+  }
+
+  /// Whether the workspace has no windows anywhere within it.
+  ///
+  /// Unlike `has_children`, this ignores area containers with no windows
+  /// in them - a workspace with fixed-width areas configured always has
+  /// children (its areas persist even when empty), so `has_children`
+  /// alone can't be used to tell whether the workspace is actually
+  /// empty of windows (e.g. for auto-deactivating it).
+  pub fn is_empty(&self) -> bool {
+    !self
+      .descendants()
+      .any(|descendant| descendant.as_window_container().is_ok())
   }
 
   /// Underlying config for the workspace.

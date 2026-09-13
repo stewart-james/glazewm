@@ -82,32 +82,64 @@ pub fn move_window_to_workspace(
       target_monitor.descendant_focus_order().next()
     };
 
-    let insertion_sibling = target_workspace
-      .descendant_focus_order()
-      .filter_map(|descendant| descendant.as_window_container().ok())
-      .find(|descendant| descendant.state() == WindowState::Tiling);
+    // Work out where in the target workspace the window should land.
+    // Areas take priority so that a window's column position carries
+    // over across workspaces (e.g. a window in the left area lands in
+    // the left area of the target workspace too), rather than following
+    // whatever window happens to have been focused there most recently -
+    // which could otherwise land it outside of any area entirely.
+    let insertion_target = if window.is_tiling_window() {
+      let target_area = window
+        .self_and_ancestors()
+        .find_map(|container| {
+          container.as_split().filter(|split| split.is_area()).cloned()
+        })
+        .and_then(|source_area| {
+          current_workspace
+            .areas()
+            .iter()
+            .position(|area| area.id() == source_area.id())
+        })
+        .and_then(|source_index| {
+          let target_areas = target_workspace.areas();
+          target_areas.get(source_index).or(target_areas.last()).cloned()
+        });
 
-    // Insert the window into the target workspace.
-    match (window.is_tiling_window(), insertion_sibling.is_some()) {
-      (true, true) => {
-        if let Some(insertion_sibling) = insertion_sibling {
-          move_container_within_tree(
-            &window.clone().into(),
-            &insertion_sibling.clone().parent().context("No parent.")?,
-            insertion_sibling.index() + 1,
-            state,
-          )?;
+      match target_area {
+        Some(area) => Some((area.clone().into(), area.child_count())),
+        None => {
+          let insertion_sibling = target_workspace
+            .descendant_focus_order()
+            .filter_map(|descendant| descendant.as_window_container().ok())
+            .find(|descendant| descendant.state() == WindowState::Tiling);
+
+          match insertion_sibling {
+            Some(sibling) => Some((
+              sibling.parent().context("No parent.")?,
+              sibling.index() + 1,
+            )),
+            None => target_workspace
+              .default_area()
+              .map(|area| (area.clone().into(), area.child_count())),
+          }
         }
       }
-      _ => {
-        move_container_within_tree(
-          &window.clone().into(),
-          &target_workspace.clone().into(),
-          target_workspace.child_count(),
-          state,
-        )?;
-      }
-    }
+    } else {
+      None
+    };
+
+    let (target_parent, target_index) = insertion_target.unwrap_or((
+      target_workspace.clone().into(),
+      target_workspace.child_count(),
+    ));
+
+    // Insert the window into the target workspace.
+    move_container_within_tree(
+      &window.clone().into(),
+      &target_parent,
+      target_index,
+      state,
+    )?;
 
     // When moving a focused window within the tree to another workspace,
     // the target workspace will get displayed. If moving the window e.g.

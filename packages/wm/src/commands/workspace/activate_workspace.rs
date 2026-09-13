@@ -167,7 +167,10 @@ fn create_workspace_areas(
     .enumerate()
     .map(|(index, area_config)| {
       let area = SplitContainer::new(
-        workspace.tiling_direction(),
+        area_config
+          .tiling_direction
+          .clone()
+          .unwrap_or(workspace.tiling_direction()),
         config.value.gaps.clone(),
       );
 

@@ -10,7 +10,7 @@ use crate::{
   },
   models::{
     Container, Monitor, NativeWindowProperties, NonTilingWindow,
-    SplitContainer, TilingWindow, WindowContainer, Workspace,
+    TilingWindow, WindowContainer,
   },
   traits::{CommonGetters, PositionGetters, WindowGetters},
   user_config::UserConfig,
@@ -364,7 +364,7 @@ fn insertion_target(
     // window opened on it). If the workspace uses fixed-width areas,
     // place the window in the default area instead of directly on the
     // workspace, so it doesn't become a rogue extra area of its own.
-    if let Some(default_area) = default_area(&focused_workspace) {
+    if let Some(default_area) = focused_workspace.default_area() {
       return Ok((
         default_area.clone().into(),
         default_area.child_count(),
@@ -394,28 +394,11 @@ fn explicit_target_parent(
 ) -> Container {
   if *window_state == WindowState::Tiling {
     if let Container::Workspace(workspace) = &parent {
-      if let Some(default_area) = default_area(workspace) {
+      if let Some(default_area) = workspace.default_area() {
         return default_area.into();
       }
     }
   }
 
   parent
-}
-
-/// Gets the workspace's default area to place new windows in, if the
-/// workspace uses fixed-width areas.
-fn default_area(workspace: &Workspace) -> Option<SplitContainer> {
-  let areas = workspace
-    .tiling_children()
-    .filter_map(|child| {
-      child.as_split().filter(|split| split.is_area()).cloned()
-    })
-    .collect::<Vec<_>>();
-
-  areas
-    .iter()
-    .find(|area| area.is_default_area())
-    .or(areas.first())
-    .cloned()
 }
