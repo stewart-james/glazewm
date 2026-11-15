@@ -17,6 +17,7 @@ use crate::{
     general::platform_sync,
     monitor::{add_monitor, move_bounded_workspaces_to_new_monitor},
     window::{manage_window, unmanage_window},
+    workspace::RememberedAreas,
   },
   models::{
     Container, Monitor, NativeMonitorProperties, RootContainer,
@@ -27,6 +28,7 @@ use crate::{
   user_config::UserConfig,
 };
 
+#[allow(clippy::struct_excessive_bools)]
 pub struct WmState {
   /// Root node of the container tree. Monitors are the children of the
   /// root node, followed by workspaces, then split containers/windows.
@@ -64,6 +66,14 @@ pub struct WmState {
   /// Whether the WM is paused.
   pub is_paused: bool,
 
+  /// Whether fixed-width workspace areas are in use. Changed with the
+  /// `toggle-areas` command.
+  pub areas_enabled: bool,
+
+  /// Placement of windows in their areas at the time areas were turned
+  /// off. Used to put the windows back when areas are turned on again.
+  pub remembered_areas: RememberedAreas,
+
   /// Whether the OS focused window is the same as the WM focused window.
   pub is_focus_synced: bool,
 
@@ -93,6 +103,8 @@ impl WmState {
       binding_modes: Vec::new(),
       ignored_windows: Vec::new(),
       is_paused: false,
+      areas_enabled: true,
+      remembered_areas: RememberedAreas::default(),
       is_focus_synced: false,
       has_initialized: false,
       event_tx,

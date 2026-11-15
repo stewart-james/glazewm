@@ -237,6 +237,10 @@ pub enum InvokeCommand {
     maximized: Option<bool>,
   },
   ToggleMinimized,
+  /// Turns fixed-width workspace areas on or off for all workspaces.
+  /// Windows go back into their previous areas when areas are turned
+  /// on again.
+  ToggleAreas,
   ToggleTiling,
   ToggleTilingDirection,
   SetTilingDirection {

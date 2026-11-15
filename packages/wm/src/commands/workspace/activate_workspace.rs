@@ -1,6 +1,8 @@
 use anyhow::Context;
 use tracing::info;
-use wm_common::{AreaConfig, TilingDirection, WmEvent, WorkspaceConfig};
+use wm_common::{
+  AreaConfig, GapsConfig, TilingDirection, WmEvent, WorkspaceConfig,
+};
 
 use super::sort_workspaces;
 use crate::{
@@ -52,18 +54,10 @@ pub fn activate_workspace(
     })
     .context("Failed to get a target monitor for the workspace.")?;
 
-  let monitor_rect = target_monitor.to_rect()?;
-
-  let tiling_direction = if monitor_rect.height() > monitor_rect.width() {
-    TilingDirection::Vertical
-  } else {
-    TilingDirection::Horizontal
-  };
-
   let workspace = Workspace::new(
     workspace_config.clone(),
     config.value.gaps.clone(),
-    tiling_direction,
+    monitor_tiling_direction(&target_monitor)?,
   );
 
   // Attach the created workspace to the specified monitor.
@@ -73,7 +67,13 @@ pub fn activate_workspace(
     None,
   )?;
 
-  create_workspace_areas(&workspace, &workspace_config.areas, config)?;
+  if state.areas_enabled {
+    create_workspace_areas(
+      &workspace,
+      &workspace_config.areas,
+      &config.value.gaps,
+    )?;
+  }
 
   sort_workspaces(&target_monitor, config)?;
 
@@ -119,17 +119,34 @@ fn workspace_config(
   found_config.cloned()
 }
 
+/// Gets the default tiling direction for a workspace on the monitor.
+///
+/// Returns `TilingDirection::Vertical` for portrait monitors, otherwise
+/// `TilingDirection::Horizontal`.
+pub fn monitor_tiling_direction(
+  monitor: &Monitor,
+) -> anyhow::Result<TilingDirection> {
+  let monitor_rect = monitor.to_rect()?;
+
+  Ok(if monitor_rect.height() > monitor_rect.width() {
+    TilingDirection::Vertical
+  } else {
+    TilingDirection::Horizontal
+  })
+}
+
 /// Creates the workspace's fixed-width areas (if configured) as
 /// persistent top-level split containers, sized according to config.
 ///
-/// Does nothing if the workspace's config has no `areas` defined.
-fn create_workspace_areas(
+/// Returns the created areas in order. Returns an empty vector if the
+/// workspace's config has no `areas` defined.
+pub fn create_workspace_areas(
   workspace: &Workspace,
   areas_config: &[AreaConfig],
-  config: &UserConfig,
-) -> anyhow::Result<()> {
+  gaps_config: &GapsConfig,
+) -> anyhow::Result<Vec<SplitContainer>> {
   if areas_config.is_empty() {
-    return Ok(());
+    return Ok(Vec::new());
   }
 
   let workspace_rect = workspace.to_rect()?;
@@ -159,8 +176,7 @@ fn create_workspace_areas(
   };
 
   // If no area is explicitly marked as default, fall back to the first.
-  let has_explicit_default =
-    areas_config.iter().any(|area| area.default);
+  let has_explicit_default = areas_config.iter().any(|area| area.default);
 
   let areas = areas_config
     .iter()
@@ -171,7 +187,7 @@ fn create_workspace_areas(
           .tiling_direction
           .clone()
           .unwrap_or(workspace.tiling_direction()),
-        config.value.gaps.clone(),
+        gaps_config.clone(),
       );
 
       area.set_is_area(true);
@@ -198,5 +214,5 @@ fn create_workspace_areas(
     area.set_tiling_size(fraction);
   }
 
-  Ok(())
+  Ok(areas)
 }

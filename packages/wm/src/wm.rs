@@ -31,7 +31,7 @@ use crate::{
       set_window_size, update_window_state, WindowPositionTarget,
     },
     workspace::{
-      focus_workspace, move_workspace_in_direction,
+      focus_workspace, move_workspace_in_direction, toggle_areas,
       update_workspace_config,
     },
   },
@@ -738,6 +738,7 @@ impl WindowManager {
           _ => Ok(()),
         }
       }
+      InvokeCommand::ToggleAreas => toggle_areas(state, config),
       InvokeCommand::ToggleTilingDirection => {
         toggle_tiling_direction(subject_container, state, config)
       }
