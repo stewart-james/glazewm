@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use anyhow::Context;
 use uuid::Uuid;
 use wm_common::GapsConfig;
+use wm_platform::Rect;
 
 use super::{create_workspace_areas, monitor_tiling_direction};
 use crate::{
@@ -11,7 +12,10 @@ use crate::{
     set_focused_descendant,
   },
   models::{Container, SplitContainer, Workspace},
-  traits::{CommonGetters, TilingDirectionGetters, TilingSizeGetters},
+  traits::{
+    CommonGetters, PositionGetters, TilingDirectionGetters,
+    TilingSizeGetters,
+  },
   user_config::UserConfig,
   wm_state::WmState,
 };
@@ -26,6 +30,39 @@ pub struct RememberedAreas {
   /// Tiling size of each direct child of an area within the area, by
   /// container ID.
   tiling_sizes: HashMap<Uuid, f32>,
+}
+
+/// Whether any monitor is ultrawide (wider than 2:1).
+///
+/// Used to turn areas off automatically when an ultrawide monitor is
+/// split (e.g. picture-by-picture mode), and on again when it is whole.
+pub fn has_ultrawide_monitor(state: &WmState) -> anyhow::Result<bool> {
+  for monitor in state.monitors() {
+    if is_ultrawide(&monitor.to_rect()?) {
+      return Ok(true);
+    }
+  }
+
+  Ok(false)
+}
+
+/// Whether the rect is wider than 2:1.
+fn is_ultrawide(rect: &Rect) -> bool {
+  rect.width() > 2 * rect.height()
+}
+
+/// Turns fixed-width workspace areas on or off for all workspaces. Does
+/// nothing if areas are already in that state.
+pub fn set_areas_enabled(
+  enabled: bool,
+  state: &mut WmState,
+  config: &UserConfig,
+) -> anyhow::Result<()> {
+  if state.areas_enabled == enabled {
+    return Ok(());
+  }
+
+  toggle_areas(state, config)
 }
 
 /// Turns fixed-width workspace areas on or off for all workspaces.
@@ -211,8 +248,11 @@ fn enable_areas(
 #[cfg(test)]
 mod tests {
   use wm_common::{AreaConfig, GapsConfig, TilingDirection};
+  use wm_platform::Rect;
 
-  use super::{disable_areas, enable_areas, RememberedAreas};
+  use super::{
+    disable_areas, enable_areas, is_ultrawide, RememberedAreas,
+  };
   use crate::{
     models::{Monitor, SplitContainer, TilingWindow, Workspace},
     traits::{CommonGetters, TilingSizeGetters},
@@ -247,6 +287,13 @@ mod tests {
       .iter()
       .map(|area| area.children().iter().map(CommonGetters::id).collect())
       .collect()
+  }
+
+  #[test]
+  fn detects_ultrawide_shape() {
+    assert!(is_ultrawide(&Rect::from_xy(0, 0, 7680, 2112)));
+    assert!(!is_ultrawide(&Rect::from_xy(0, 0, 3840, 2112)));
+    assert!(!is_ultrawide(&Rect::from_xy(0, 0, 2560, 1440)));
   }
 
   #[test]

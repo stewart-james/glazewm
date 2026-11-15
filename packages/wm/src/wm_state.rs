@@ -17,7 +17,9 @@ use crate::{
     general::platform_sync,
     monitor::{add_monitor, move_bounded_workspaces_to_new_monitor},
     window::{manage_window, unmanage_window},
-    workspace::RememberedAreas,
+    workspace::{
+      has_ultrawide_monitor, set_areas_enabled, RememberedAreas,
+    },
   },
   models::{
     Container, Monitor, NativeMonitorProperties, RootContainer,
@@ -132,6 +134,11 @@ impl WmState {
         move_bounded_workspaces_to_new_monitor(&monitor, self, config)?;
       }
     }
+
+    // Use areas only if a monitor is ultrawide (e.g. not when it is split
+    // in picture-by-picture mode). No windows are managed yet, so this
+    // only removes the empty areas.
+    set_areas_enabled(has_ultrawide_monitor(self)?, self, config)?;
 
     // Manage windows in reverse z-order (bottom to top). This helps to
     // preserve the original stacking order.

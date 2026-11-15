@@ -2,9 +2,12 @@ use anyhow::Context;
 use wm_common::try_warn;
 
 use crate::{
-  commands::monitor::{
-    add_monitor, move_bounded_workspaces_to_new_monitor, remove_monitor,
-    sort_monitors, update_monitor,
+  commands::{
+    monitor::{
+      add_monitor, move_bounded_workspaces_to_new_monitor, remove_monitor,
+      sort_monitors, update_monitor,
+    },
+    workspace::{has_ultrawide_monitor, set_areas_enabled},
   },
   models::{Monitor, NativeMonitorProperties},
   traits::{CommonGetters, PositionGetters, WindowGetters},
@@ -34,6 +37,7 @@ pub fn handle_display_settings_changed(
         .try_collect::<Vec<_>>()
     }));
 
+  let was_ultrawide = has_ultrawide_monitor(state)?;
   let mut pending_monitors = state.monitors();
   let mut unmatched_displays = Vec::new();
 
@@ -112,6 +116,14 @@ pub fn handle_display_settings_changed(
           .translate_to_center(&workspace.to_rect()?),
       );
     }
+  }
+
+  // Turn areas on or off when an ultrawide monitor becomes split (e.g.
+  // picture-by-picture mode) or whole again. Only a change of shape
+  // does this, so that a manual `toggle-areas` is kept otherwise.
+  let is_ultrawide = has_ultrawide_monitor(state)?;
+  if is_ultrawide != was_ultrawide {
+    set_areas_enabled(is_ultrawide, state, config)?;
   }
 
   // Redraw full container tree.
