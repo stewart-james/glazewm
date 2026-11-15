@@ -168,6 +168,11 @@ pub enum InvokeCommand {
     #[clap(long)]
     direction: Direction,
   },
+  /// Moves the focused tiling window to the center of the workspace, at
+  /// half of its width. If the workspace has areas, the window goes into
+  /// the default area and the other windows there move to the adjacent
+  /// areas. Otherwise, the window gets 50% of the width in the middle.
+  MoveToCenter,
   MoveWorkspace {
     #[clap(long)]
     direction: Direction,
